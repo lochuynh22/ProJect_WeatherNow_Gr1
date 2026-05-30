@@ -16,11 +16,29 @@ public class ForecastResponse {
 
         @SerializedName("weather")
         public List<Weather> weather;
+
+        @SerializedName("wind")
+        public Wind wind;
+
+        @SerializedName("pop")
+        public float pop;
+
+        @SerializedName("clouds")
+        public Clouds clouds;
     }
 
     public static class Main {
         @SerializedName("temp")
         public float temp;
+
+        @SerializedName("temp_min")
+        public float tempMin;
+
+        @SerializedName("temp_max")
+        public float tempMax;
+
+        @SerializedName("humidity")
+        public int humidity;
     }
 
     public static class Weather {
@@ -29,5 +47,15 @@ public class ForecastResponse {
 
         @SerializedName("icon")
         public String icon;
+    }
+
+    public static class Wind {
+        @SerializedName("speed")
+        public float speed;
+    }
+
+    public static class Clouds {
+        @SerializedName("all")
+        public int all;
     }
 }

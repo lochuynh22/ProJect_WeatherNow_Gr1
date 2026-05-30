@@ -26,6 +26,7 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.re.weathernow.R;
 import com.re.weathernow.adapter.ForecastAdapter;
+import com.re.weathernow.adapter.HourlyAdapter;
 import com.re.weathernow.api.ApiClient;
 import com.re.weathernow.model.CurrentWeatherResponse;
 import com.re.weathernow.model.ForecastResponse;
@@ -43,12 +44,17 @@ public class MainActivity extends AppCompatActivity {
     private EditText edtCity;
     private Button btnSearch;
     private TextView tvCityName, tvTemperature, tvDescription, tvHumidity, tvWindSpeed;
+    private TextView tvFeelsLike, tvVisibility, tvCountry, tvSunrise, tvSunset, tvUnitToggle;
     private ImageView imgWeatherIcon;
     private RecyclerView rvForecast;
+    private RecyclerView rvHourly;
     private SwipeRefreshLayout swipeRefreshLayout;
 
     private FusedLocationProviderClient fusedLocationClient;
     private SharedPreferences sharedPreferences;
+
+    private String currentUnit = Constants.UNIT_METRIC;
+    private String currentCity = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,11 +75,34 @@ public class MainActivity extends AppCompatActivity {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         sharedPreferences = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE);
 
+        // Đọc unit từ SharedPreferences
+        currentUnit = sharedPreferences.getString(Constants.UNIT_PREF, Constants.UNIT_METRIC);
+        tvUnitToggle.setText(currentUnit.equals(Constants.UNIT_METRIC) ? "°C" : "°F");
+
+        // Setup rvHourly horizontal
+        rvHourly.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+
         btnSearch.setOnClickListener(v -> {
             String city = edtCity.getText().toString().trim();
             if (!city.isEmpty()) {
+                currentCity = city;
                 getWeatherDataByCity(city);
                 saveLastCity(city);
+            }
+        });
+
+        // Toggle đơn vị
+        tvUnitToggle.setOnClickListener(v -> {
+            if (currentUnit.equals(Constants.UNIT_METRIC)) {
+                currentUnit = Constants.UNIT_IMPERIAL;
+                tvUnitToggle.setText("°F");
+            } else {
+                currentUnit = Constants.UNIT_METRIC;
+                tvUnitToggle.setText("°C");
+            }
+            sharedPreferences.edit().putString(Constants.UNIT_PREF, currentUnit).apply();
+            if (!currentCity.isEmpty()) {
+                getWeatherDataByCity(currentCity);
             }
         });
 
@@ -90,8 +119,15 @@ public class MainActivity extends AppCompatActivity {
         tvDescription = findViewById(R.id.tvDescription);
         tvHumidity = findViewById(R.id.tvHumidity);
         tvWindSpeed = findViewById(R.id.tvWindSpeed);
+        tvFeelsLike = findViewById(R.id.tvFeelsLike);
+        tvVisibility = findViewById(R.id.tvVisibility);
+        tvCountry = findViewById(R.id.tvCountry);
+        tvSunrise = findViewById(R.id.tvSunrise);
+        tvSunset = findViewById(R.id.tvSunset);
+        tvUnitToggle = findViewById(R.id.tvUnitToggle);
         imgWeatherIcon = findViewById(R.id.imgWeatherIcon);
         rvForecast = findViewById(R.id.rvForecast);
+        rvHourly = findViewById(R.id.rvHourly);
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
 
         rvForecast.setLayoutManager(new LinearLayoutManager(this));
@@ -108,6 +144,7 @@ public class MainActivity extends AppCompatActivity {
     private void loadLastOrCurrentLocation() {
         String lastCity = sharedPreferences.getString(Constants.LAST_CITY, "");
         if (!lastCity.isEmpty()) {
+            currentCity = lastCity;
             getWeatherDataByCity(lastCity);
         } else {
             getLastLocation();
@@ -131,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void getWeatherDataByCity(String city) {
         swipeRefreshLayout.setRefreshing(true);
-        ApiClient.getClient().getCurrentWeatherByCity(city, Constants.API_KEY, "metric")
+        ApiClient.getClient().getCurrentWeatherByCity(city, Constants.API_KEY, currentUnit)
                 .enqueue(new Callback<CurrentWeatherResponse>() {
                     @Override
                     public void onResponse(Call<CurrentWeatherResponse> call, Response<CurrentWeatherResponse> response) {
@@ -155,11 +192,14 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
 
-        ApiClient.getClient().getForecastByCity(city, Constants.API_KEY, "metric")
+        ApiClient.getClient().getForecastByCity(city, Constants.API_KEY, currentUnit)
                 .enqueue(new Callback<ForecastResponse>() {
                     @Override
                     public void onResponse(Call<ForecastResponse> call, Response<ForecastResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
+                            // Hourly: toàn bộ 40 items, không filter
+                            rvHourly.setAdapter(new HourlyAdapter(response.body().list));
+                            // Daily: filter 1 item/ngày
                             rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list)));
                         }
                         swipeRefreshLayout.setRefreshing(false);
@@ -174,12 +214,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void getWeatherDataByLocation(double lat, double lon) {
         swipeRefreshLayout.setRefreshing(true);
-        ApiClient.getClient().getCurrentWeatherByLocation(lat, lon, Constants.API_KEY, "metric")
+        ApiClient.getClient().getCurrentWeatherByLocation(lat, lon, Constants.API_KEY, currentUnit)
                 .enqueue(new Callback<CurrentWeatherResponse>() {
                     @Override
                     public void onResponse(Call<CurrentWeatherResponse> call, Response<CurrentWeatherResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
                             updateUI(response.body());
+                            currentCity = response.body().cityName != null ? response.body().cityName : "";
                             saveLastCity(response.body().cityName);
                         } else {
                             // HTTP 4xx/5xx: không lấy được thời tiết theo vị trí
@@ -199,11 +240,14 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
 
-        ApiClient.getClient().getForecastByLocation(lat, lon, Constants.API_KEY, "metric")
+        ApiClient.getClient().getForecastByLocation(lat, lon, Constants.API_KEY, currentUnit)
                 .enqueue(new Callback<ForecastResponse>() {
                     @Override
                     public void onResponse(Call<ForecastResponse> call, Response<ForecastResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
+                            // Hourly: toàn bộ 40 items, không filter
+                            rvHourly.setAdapter(new HourlyAdapter(response.body().list));
+                            // Daily: filter 1 item/ngày
                             rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list)));
                         }
                         swipeRefreshLayout.setRefreshing(false);
@@ -218,13 +262,47 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateUI(CurrentWeatherResponse weather) {
         tvCityName.setText(weather.cityName);
-        tvTemperature.setText(Math.round(weather.main.temp) + "°C");
+
+        // Đơn vị nhiệt độ
+        String tempUnit = currentUnit.equals(Constants.UNIT_METRIC) ? "°C" : "°F";
+
+        // Nhiệt độ chính với đơn vị đúng
+        tvTemperature.setText(Math.round(weather.main.temp) + tempUnit);
         tvDescription.setText(weather.weather.get(0).description);
         tvHumidity.setText(weather.main.humidity + "%");
+
+        // Tốc độ gió
         tvWindSpeed.setText(weather.wind.speed + " m/s");
 
+        // Cảm giác như
+        tvFeelsLike.setText(Math.round(weather.main.feelsLike) + tempUnit);
+
+        // Tầm nhìn (chuyển sang km)
+        int visKm = weather.visibility / 1000;
+        tvVisibility.setText(visKm + " km");
+
+        // Quốc gia, Sunrise, Sunset
+        if (weather.sys != null) {
+            tvCountry.setText(weather.sys.country);
+            String sunriseStr = formatUnixTime(weather.sys.sunrise, weather.timezone);
+            String sunsetStr  = formatUnixTime(weather.sys.sunset,  weather.timezone);
+            tvSunrise.setText(sunriseStr);
+            tvSunset.setText(sunsetStr);
+        }
+
+        // Icon thời tiết
         String iconUrl = "https://openweathermap.org/img/wn/" + weather.weather.get(0).icon + "@4x.png";
         Glide.with(this).load(iconUrl).into(imgWeatherIcon);
+    }
+
+    /**
+     * Chuyển Unix timestamp + timezone offset sang chuỗi HH:mm
+     */
+    private String formatUnixTime(long unixTime, long timezone) {
+        java.util.Date date = new java.util.Date((unixTime + timezone) * 1000L);
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return sdf.format(date);
     }
 
     private void saveLastCity(String city) {

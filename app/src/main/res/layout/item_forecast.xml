@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
     android:layout_margin="5dp"
     android:background="@drawable/forecast_item_bg"
+    android:orientation="vertical"
     android:padding="14dp">
 
-    <!-- Row trên: ngày + icon + nhiệt độ -->
+    <!-- Row 1: icon | tên ngày + mô tả | nhiệt độ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -22,7 +21,7 @@
             android:layout_height="44dp"
             android:layout_marginEnd="10dp" />
 
-        <!-- Ngày giờ -->
+        <!-- Tên ngày + mô tả -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -33,21 +32,22 @@
                 android:id="@+id/tvDate"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:letterSpacing="0.02"
                 android:textColor="#FFFFFFFF"
                 android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.02" />
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tvForecastDesc"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:textAllCaps="false"
                 android:textColor="#AACFE2FF"
-                android:textSize="11sp"
-                android:layout_marginTop="2dp"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:textSize="11sp" />
+
         </LinearLayout>
 
         <!-- Nhiệt độ -->
@@ -55,8 +55,58 @@
             android:id="@+id/tvForecastTemp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/accent_yellow"
+            android:textColor="#FFD54F"
             android:textSize="20sp"
             android:textStyle="bold" />
+
     </LinearLayout>
+
+    <!-- Row 2: độ ẩm | spacer | xác suất mưa | spacer | min~max -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <!-- Độ ẩm -->
+        <TextView
+            android:id="@+id/tvForecastHumidity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawablePadding="3dp"
+            android:textColor="#80DEEA"
+            android:textSize="11sp" />
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Xác suất mưa -->
+        <TextView
+            android:id="@+id/tvForecastPop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawablePadding="3dp"
+            android:textColor="#80DEEA"
+            android:textSize="11sp" />
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Min~Max nhiệt độ -->
+        <TextView
+            android:id="@+id/tvForecastMinMax"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#CCE0E0FF"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
 </LinearLayout>
