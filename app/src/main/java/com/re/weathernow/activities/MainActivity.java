@@ -32,6 +32,13 @@ import com.re.weathernow.model.CurrentWeatherResponse;
 import com.re.weathernow.model.ForecastResponse;
 import com.re.weathernow.utils.Constants;
 
+import com.re.weathernow.adapter.SearchHistoryAdapter;
+import com.re.weathernow.adapter.CitySearchAdapter;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,6 +56,18 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView rvForecast;
     private RecyclerView rvHourly;
     private SwipeRefreshLayout swipeRefreshLayout;
+
+    // History views
+    private android.widget.LinearLayout layoutHistory;
+    private RecyclerView rvHistory;
+    private TextView tvClearHistory;
+    private SearchHistoryAdapter historyAdapter;
+
+    // Suggestion views
+    private android.widget.LinearLayout layoutSuggestion;
+    private RecyclerView rvSuggestion;
+    private CitySearchAdapter suggestionAdapter;
+    private List<String> allCities = new ArrayList<>();
 
     private FusedLocationProviderClient fusedLocationClient;
     private SharedPreferences sharedPreferences;
@@ -86,8 +105,11 @@ public class MainActivity extends AppCompatActivity {
             String city = edtCity.getText().toString().trim();
             if (!city.isEmpty()) {
                 currentCity = city;
+                hideHistory();
+                edtCity.clearFocus();
                 getWeatherDataByCity(city);
                 saveLastCity(city);
+                saveSearchHistory(city);  // lưu vào lịch sử
             }
         });
 
@@ -107,6 +129,12 @@ public class MainActivity extends AppCompatActivity {
         });
 
         swipeRefreshLayout.setOnRefreshListener(this::loadLastOrCurrentLocation);
+
+        // Lịch sử tìm kiếm
+        setupHistory();
+
+        // Gợi ý thành phố khi gõ
+        setupSuggestion();
 
         loadLastOrCurrentLocation();
     }
@@ -132,6 +160,15 @@ public class MainActivity extends AppCompatActivity {
 
         rvForecast.setLayoutManager(new LinearLayoutManager(this));
 
+        // History views
+        layoutHistory = findViewById(R.id.layoutHistory);
+        rvHistory = findViewById(R.id.rvHistory);
+        tvClearHistory = findViewById(R.id.tvClearHistory);
+
+        // Suggestion views
+        layoutSuggestion = findViewById(R.id.layoutSuggestion);
+        rvSuggestion = findViewById(R.id.rvSuggestion);
+
         // SwipeRefreshLayout màu sáng nổi bật trên nền tối
         swipeRefreshLayout.setColorSchemeColors(
             Color.parseColor("#64B5F6"),
@@ -140,6 +177,211 @@ public class MainActivity extends AppCompatActivity {
         );
         swipeRefreshLayout.setProgressBackgroundColorSchemeColor(Color.parseColor("#302B63"));
     }
+
+    // ===================== SEARCH HISTORY =====================
+
+    private void setupHistory() {
+        List<String> history = loadSearchHistory();
+        historyAdapter = new SearchHistoryAdapter(history, new SearchHistoryAdapter.OnHistoryClickListener() {
+            @Override
+            public void onCityClick(String city) {
+                // Bấm vào 1 city trong lịch sử → tìm kiếm luôn
+                edtCity.setText(city);
+                currentCity = city;
+                hideHistory();
+                getWeatherDataByCity(city);
+                saveLastCity(city);
+                // Đưa city lên đầu lịch sử
+                saveSearchHistory(city);
+            }
+
+            @Override
+            public void onDeleteClick(String city) {
+                // Xóa 1 city khỏi lịch sử
+                List<String> history = loadSearchHistory();
+                history.remove(city);
+                saveHistoryList(history);
+                historyAdapter.updateList(history);
+                if (history.isEmpty()) hideHistory();
+            }
+        });
+        rvHistory.setLayoutManager(new LinearLayoutManager(this));
+        rvHistory.setAdapter(historyAdapter);
+
+        // Hiện dropdown khi focus vào ô search
+        edtCity.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                List<String> h = loadSearchHistory();
+                if (!h.isEmpty()) {
+                    historyAdapter.updateList(h);
+                    showHistory();
+                }
+            }
+        });
+
+        // Ẩn khi bấm ra ngoài
+        swipeRefreshLayout.setOnTouchListener((v, event) -> {
+            hideHistory();
+            edtCity.clearFocus();
+            return false;
+        });
+
+        // Xóa toàn bộ lịch sử
+        tvClearHistory.setOnClickListener(v -> {
+            saveHistoryList(new ArrayList<>());
+            historyAdapter.updateList(new ArrayList<>());
+            hideHistory();
+        });
+    }
+
+    private void showHistory() {
+        layoutHistory.setVisibility(android.view.View.VISIBLE);
+    }
+
+    private void hideHistory() {
+        layoutHistory.setVisibility(android.view.View.GONE);
+    }
+
+    /** Lưu thành phố vào đầu danh sách lịch sử, tối đa MAX_HISTORY */
+    private void saveSearchHistory(String city) {
+        List<String> history = loadSearchHistory();
+        history.remove(city);           // xóa nếu đã tồn tại (tránh trùng)
+        history.add(0, city);           // thêm lên đầu
+        if (history.size() > Constants.MAX_HISTORY) {
+            history = history.subList(0, Constants.MAX_HISTORY);
+        }
+        saveHistoryList(history);
+    }
+
+    /** Đọc danh sách lịch sử từ SharedPreferences */
+    private List<String> loadSearchHistory() {
+        String raw = sharedPreferences.getString(Constants.SEARCH_HISTORY, "");
+        List<String> list = new ArrayList<>();
+        if (!raw.isEmpty()) {
+            String[] parts = raw.split("\\|");
+            for (String p : parts) {
+                if (!p.trim().isEmpty()) list.add(p.trim());
+            }
+        }
+        return list;
+    }
+
+    /** Ghi danh sách lịch sử vào SharedPreferences (ngăn cách bởi "|") */
+    private void saveHistoryList(List<String> list) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            sb.append(list.get(i));
+            if (i < list.size() - 1) sb.append("|");
+        }
+        sharedPreferences.edit().putString(Constants.SEARCH_HISTORY, sb.toString()).apply();
+    }
+
+    // ===================== END HISTORY =====================
+
+    // ===================== CITY SUGGESTION =====================
+
+    private void setupSuggestion() {
+        // Load danh sách thành phố từ file assets (chạy 1 lần)
+        loadCitiesFromAssets();
+
+        suggestionAdapter = new CitySearchAdapter(new ArrayList<>(), city -> {
+            // User bấm chọn 1 thành phố gợi ý
+            edtCity.setText(city);
+            currentCity = city;
+            hideSuggestion();
+            hideHistory();
+            edtCity.clearFocus();
+            getWeatherDataByCity(city);
+            saveLastCity(city);
+            saveSearchHistory(city);
+        });
+        rvSuggestion.setLayoutManager(new LinearLayoutManager(this));
+        rvSuggestion.setAdapter(suggestionAdapter);
+
+        // TextWatcher: lắng nghe từng ký tự user gõ
+        edtCity.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s.toString().trim();
+                if (query.length() >= 2) {
+                    // Lọ danh sách theo từ khóa
+                    List<String> filtered = filterCities(query);
+                    suggestionAdapter.updateSuggestions(filtered);
+                    if (!filtered.isEmpty()) {
+                        hideHistory();       // ẩn lịch sử khi đang gõ gợi ý
+                        showSuggestion();
+                    } else {
+                        hideSuggestion();
+                    }
+                } else {
+                    hideSuggestion();
+                    // Nếu xóa hết text và đang focus → hiện lại lịch sử
+                    if (query.isEmpty() && edtCity.hasFocus()) {
+                        List<String> h = loadSearchHistory();
+                        if (!h.isEmpty()) {
+                            historyAdapter.updateList(h);
+                            showHistory();
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+    }
+
+    /** Lọn danh sách thành phố từ file assets/cities.txt */
+    private void loadCitiesFromAssets() {
+        try {
+            InputStream is = getAssets().open("cities.txt");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String city = line.trim();
+                if (!city.isEmpty()) allCities.add(city);
+            }
+            reader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Lọ danh sách thành phố theo từ khóa, tối đa 6 kết quả */
+    private List<String> filterCities(String query) {
+        List<String> result = new ArrayList<>();
+        String lower = query.toLowerCase();
+        for (String city : allCities) {
+            if (city.toLowerCase().startsWith(lower)) {
+                result.add(city);
+                if (result.size() >= 6) break;  // chỉ hiện tối đa 6 gợi ý
+            }
+        }
+        // Nếu startsWith không đủ  6 → tìm thêm các city chứa query
+        if (result.size() < 6) {
+            for (String city : allCities) {
+                if (!city.toLowerCase().startsWith(lower)
+                        && city.toLowerCase().contains(lower)) {
+                    result.add(city);
+                    if (result.size() >= 6) break;
+                }
+            }
+        }
+        return result;
+    }
+
+    private void showSuggestion() {
+        layoutSuggestion.setVisibility(View.VISIBLE);
+    }
+
+    private void hideSuggestion() {
+        layoutSuggestion.setVisibility(View.GONE);
+    }
+
+    // ===================== END SUGGESTION =====================
 
     private void loadLastOrCurrentLocation() {
         String lastCity = sharedPreferences.getString(Constants.LAST_CITY, "");
@@ -197,10 +439,10 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onResponse(Call<ForecastResponse> call, Response<ForecastResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
-                            // Hourly: toàn bộ 40 items, không filter
-                            rvHourly.setAdapter(new HourlyAdapter(response.body().list));
+                            // Fix 3: Truyền currentUnit vào HourlyAdapter để hiển thị đúng °C/°F
+                            rvHourly.setAdapter(new HourlyAdapter(response.body().list, currentUnit));
                             // Daily: filter 1 item/ngày
-                            rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list)));
+                            rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list), currentUnit));
                         }
                         swipeRefreshLayout.setRefreshing(false);
                     }
@@ -220,8 +462,12 @@ public class MainActivity extends AppCompatActivity {
                     public void onResponse(Call<CurrentWeatherResponse> call, Response<CurrentWeatherResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
                             updateUI(response.body());
-                            currentCity = response.body().cityName != null ? response.body().cityName : "";
-                            saveLastCity(response.body().cityName);
+                            // Fix 5: null-safe trước khi lưu tên thành phố từ GPS
+                            String gpsCity = response.body().cityName;
+                            if (gpsCity != null && !gpsCity.isEmpty()) {
+                                currentCity = gpsCity;
+                                saveLastCity(gpsCity);
+                            }
                         } else {
                             // HTTP 4xx/5xx: không lấy được thời tiết theo vị trí
                             swipeRefreshLayout.setRefreshing(false);
@@ -246,9 +492,10 @@ public class MainActivity extends AppCompatActivity {
                     public void onResponse(Call<ForecastResponse> call, Response<ForecastResponse> response) {
                         if (response.isSuccessful() && response.body() != null) {
                             // Hourly: toàn bộ 40 items, không filter
-                            rvHourly.setAdapter(new HourlyAdapter(response.body().list));
+                            // Fix 3: Truyền currentUnit vào HourlyAdapter để hiển thị đúng °C/°F
+                            rvHourly.setAdapter(new HourlyAdapter(response.body().list, currentUnit));
                             // Daily: filter 1 item/ngày
-                            rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list)));
+                            rvForecast.setAdapter(new ForecastAdapter(filterDailyForecast(response.body().list), currentUnit));
                         }
                         swipeRefreshLayout.setRefreshing(false);
                     }

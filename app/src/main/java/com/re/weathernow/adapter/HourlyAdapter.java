@@ -18,9 +18,12 @@ import java.util.List;
 public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyViewHolder> {
 
     private List<ForecastResponse.ForecastItem> items;
+    // Fix 3: Thêm unit để hiển thị đúng °C hoặc °F
+    private String unit;
 
-    public HourlyAdapter(List<ForecastResponse.ForecastItem> items) {
+    public HourlyAdapter(List<ForecastResponse.ForecastItem> items, String unit) {
         this.items = items;
+        this.unit = unit;
     }
 
     @NonNull
@@ -42,7 +45,7 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
             holder.tvHourTime.setText("--:--");
         }
 
-        // Load icon thời tiết bằng Glide
+        // Fix 4: Null-check cho weather list trước khi load icon
         if (item.weather != null && !item.weather.isEmpty()) {
             String icon = item.weather.get(0).icon;
             String iconUrl = "https://openweathermap.org/img/wn/" + icon + "@2x.png";
@@ -51,9 +54,12 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
                     .into(holder.imgHourIcon);
         }
 
-        // Nhiệt độ
+        // Fix 3: Hiển thị nhiệt độ kèm đơn vị đúng (°C hoặc °F)
         if (item.main != null) {
-            holder.tvHourTemp.setText(Math.round(item.main.temp) + "°");
+            String tempUnit = (unit != null && unit.equals("imperial")) ? "°F" : "°C";
+            holder.tvHourTemp.setText(Math.round(item.main.temp) + tempUnit);
+        } else {
+            holder.tvHourTemp.setText("--");
         }
 
         // Xác suất mưa
@@ -70,8 +76,10 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
         return items != null ? items.size() : 0;
     }
 
-    public void setItems(List<ForecastResponse.ForecastItem> items) {
+    // Fix 3: setItems cũng nhận unit để cập nhật khi người dùng toggle đơn vị
+    public void setItems(List<ForecastResponse.ForecastItem> items, String unit) {
         this.items = items;
+        this.unit = unit;
         notifyDataSetChanged();
     }
 

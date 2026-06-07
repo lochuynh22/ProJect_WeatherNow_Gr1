@@ -2,7 +2,18 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
 android {
+    buildFeatures {
+        buildConfig true
+    }
     namespace 'com.re.weathernow'
     compileSdk 35
 
@@ -12,6 +23,7 @@ android {
         targetSdk 35
         versionCode 1
         versionName "1.0"
+        buildConfigField "String", "OPENWEATHER_API_KEY", "\"${localProperties['OPENWEATHER_API_KEY']}\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
